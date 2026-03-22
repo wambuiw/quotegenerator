@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Daily Spark ✦ Quote Generator</title>
+  <link rel="stylesheet" href="/style.css" />
+  <!-- Google Fonts: Playfair Display (display) + DM Sans (body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- ── BACKGROUND DECORATION ── -->
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <div class="bg-orb orb-3"></div>
+
+  <!-- ── MAIN CARD (the "popup" UI) ── -->
+  <div class="card-wrapper">
+    <div class="card" id="mainCard">
+
+      <!-- Card Header -->
+      <div class="card-header">
+        <span class="logo-mark">✦</span>
+        <h1 class="app-title">Daily Spark</h1>
+        <p class="app-sub">Your pocket motivational companion</p>
+      </div>
+
+      <!-- Divider -->
+      <div class="divider"></div>
+
+      <!-- Quote Display Area -->
+      <div class="quote-area" id="quoteArea">
+        <p class="quote-placeholder" id="quotePlaceholder">
+          Press the button below to ignite your day ↓
+        </p>
+        <blockquote class="quote-text hidden" id="quoteText"></blockquote>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="btn-group">
+        <!-- Generate button calls our /random route -->
+        <button class="btn btn-primary" id="generateBtn" onclick="generateQuote()">
+          <span class="btn-icon">⚡</span> Generate Quote
+        </button>
+
+        <!-- Save button calls our /save route; disabled until a quote is shown -->
+        <button class="btn btn-secondary" id="saveBtn" onclick="saveQuote()" disabled>
+          <span class="btn-icon">💾</span> Save Quote
+        </button>
+      </div>
+
+      <!-- Feedback message area (shows success/error messages) -->
+      <div class="feedback" id="feedback"></div>
+
+      <!-- Divider -->
+      <div class="divider"></div>
+
+      <!-- Saved Quotes Section -->
+      <div class="saved-section">
+        <button class="toggle-btn" id="toggleSaved" onclick="toggleSavedQuotes()">
+          📋 View Saved Quotes <span id="toggleArrow">▾</span>
+        </button>
+
+        <!-- Hidden panel — shown when the user clicks above -->
+        <div class="saved-panel hidden" id="savedPanel">
+          <div id="savedList">
+            <p class="muted">Loading...</p>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /card -->
+  </div><!-- /card-wrapper -->
+
+  <!-- ── JAVASCRIPT ── -->
+  <!--
+    All the client-side logic lives here.
+    fetch() is the modern way to make HTTP requests from the browser
+    without reloading the page (called AJAX or "async" requests).
+  -->
+  <script>
+    // Track the currently displayed quote so we can save it
+    let currentQuote = '';
+
+    // ── generateQuote ──────────────────────────────────────────────
+    // Calls GET /random on our Sinatra server and displays the result
+    async function generateQuote() {
+      const btn    = document.getElementById('generateBtn');
+      const area   = document.getElementById('quoteArea');
+      const text   = document.getElementById('quoteText');
+      const holder = document.getElementById('quotePlaceholder');
+      const saveBtn = document.getElementById('saveBtn');
+
+      // Show loading state
+      btn.disabled = true;
+      btn.innerHTML = '<span class="btn-icon spin">⚡</span> Thinking...';
+      clearFeedback();
+
+      try {
+        // fetch() sends a GET request to /random
+        const response = await fetch('/random');
+        const data     = await response.json();   // Parse JSON response
+
+        if (data.status === 'ok') {
+          currentQuote = data.quote;
+
+          // Animate the quote in
+          area.classList.add('fade-out');
+          setTimeout(() => {
+            holder.classList.add('hidden');
+            text.textContent = '"' + data.quote + '"';
+            text.classList.remove('hidden');
+            area.classList.remove('fade-out');
+            area.classList.add('fade-in');
+            saveBtn.disabled = false;   // Now the user can save this quote
+          }, 200);
+
+        } else {
+          showFeedback('Something went wrong fetching a quote.', 'error');
+        }
+
+      } catch (err) {
+        // This fires if the server is unreachable
+        showFeedback('Cannot reach the server. Is app.rb running?', 'error');
+      } finally {
+        // Re-enable the button regardless of success or failure
+        btn.disabled = false;
+        btn.innerHTML = '<span class="btn-icon">⚡</span> Generate Quote';
+      }
+    }
+
+    // ── saveQuote ──────────────────────────────────────────────────
+    // Calls POST /save with the current quote
+    async function saveQuote() {
+      if (!currentQuote) return;
+
+      const saveBtn = document.getElementById('saveBtn');
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<span class="btn-icon">⏳</span> Saving...';
+
+      try {
+        // POST request: we send the quote as form data in the request body
+        const response = await fetch('/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'quote=' + encodeURIComponent(currentQuote)
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'ok') {
+          showFeedback(data.message, 'success');
+        } else {
+          showFeedback(data.message, 'error');
+        }
+
+      } catch (err) {
+        showFeedback('Save failed. Server may be down.', 'error');
+      } finally {
+        saveBtn.disabled  = false;
+        saveBtn.innerHTML = '<span class="btn-icon">💾</span> Save Quote';
+      }
+    }
+
+    // ── toggleSavedQuotes ──────────────────────────────────────────
+    // Shows/hides the saved quotes panel, fetching from GET /saved
+    async function toggleSavedQuotes() {
+      const panel  = document.getElementById('savedPanel');
+      const arrow  = document.getElementById('toggleArrow');
+      const list   = document.getElementById('savedList');
+
+      if (!panel.classList.contains('hidden')) {
+        panel.classList.add('hidden');
+        arrow.textContent = '▾';
+        return;
+      }
+
+      // Show the panel and fetch data
+      panel.classList.remove('hidden');
+      arrow.textContent = '▴';
+      list.innerHTML = '<p class="muted">Loading...</p>';
+
+      try {
+        const response = await fetch('/saved');
+        const data     = await response.json();
+
+        if (data.status === 'ok') {
+          if (data.quotes.length === 0) {
+            list.innerHTML = '<p class="muted">No saved quotes yet. Generate one and save it!</p>';
+          } else {
+            // Build HTML list items from the array of saved quotes
+            list.innerHTML = data.quotes.map((q, i) =>
+              `<div class="saved-item">
+                <span class="saved-num">${i + 1}</span>
+                <span class="saved-q">${escapeHtml(q)}</span>
+              </div>`
+            ).join('');
+          }
+        } else {
+          list.innerHTML = '<p class="muted error-text">' + data.message + '</p>';
+        }
+
+      } catch (err) {
+        list.innerHTML = '<p class="muted error-text">Could not load saved quotes.</p>';
+      }
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────
+
+    // Show a feedback message with a type: 'success' | 'error'
+    function showFeedback(msg, type) {
+      const el = document.getElementById('feedback');
+      el.textContent  = msg;
+      el.className    = 'feedback ' + type;
+    }
+
+    function clearFeedback() {
+      const el = document.getElementById('feedback');
+      el.textContent = '';
+      el.className   = 'feedback';
+    }
+
+    // Prevent XSS: escape special HTML characters before inserting user data into DOM
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+  </script>
+
+</body>
+</html>

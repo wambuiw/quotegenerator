@@ -1,0 +1,3 @@
+# Saved quotes will appear below this line
+# Format: [YYYY-MM-DD HH:MM] Quote text — Author
+[2026-03-23 00:01] Don't wait for opportunity. Create it.
