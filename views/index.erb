@@ -42,12 +42,12 @@
       <div class="btn-group">
         <!-- Generate button calls our /random route -->
         <button class="btn btn-primary" id="generateBtn" onclick="generateQuote()">
-          <span class="btn-icon">⚡</span> Generate Quote
+          <span class="btn-icon"></span> Generate Quote
         </button>
 
         <!-- Save button calls our /save route; disabled until a quote is shown -->
         <button class="btn btn-secondary" id="saveBtn" onclick="saveQuote()" disabled>
-          <span class="btn-icon">💾</span> Save Quote
+          <span class="btn-icon"></span> Save Quote
         </button>
       </div>
 
@@ -60,7 +60,7 @@
       <!-- Saved Quotes Section -->
       <div class="saved-section">
         <button class="toggle-btn" id="toggleSaved" onclick="toggleSavedQuotes()">
-          📋 View Saved Quotes <span id="toggleArrow">▾</span>
+           View Saved Quotes <span id="toggleArrow">▾</span>
         </button>
 
         <!-- Hidden panel — shown when the user clicks above -->
@@ -95,7 +95,7 @@
 
       // Show loading state
       btn.disabled = true;
-      btn.innerHTML = '<span class="btn-icon spin">⚡</span> Thinking...';
+      btn.innerHTML = '<span class="btn-icon spin">⚡</span> Loading...';
       clearFeedback();
 
       try {
@@ -150,11 +150,16 @@
 
         const data = await response.json();
 
-        if (data.status === 'ok') {
-          showFeedback(data.message, 'success');
-        } else {
-          showFeedback(data.message, 'error');
-        }
+       if (data.status === 'ok') {
+  showFeedback(data.message, 'success');
+
+  // refresh saved quotes panel if open
+  const panel = document.getElementById('savedPanel');
+  if (!panel.classList.contains('hidden')) {
+    toggleSavedQuotes();
+    toggleSavedQuotes();
+  }
+}
 
       } catch (err) {
         showFeedback('Save failed. Server may be down.', 'error');
@@ -188,15 +193,25 @@
 
         if (data.status === 'ok') {
           if (data.quotes.length === 0) {
-            list.innerHTML = '<p class="muted">No saved quotes yet. Generate one and save it!</p>';
-          } else {
-            // Build HTML list items from the array of saved quotes
-            list.innerHTML = data.quotes.map((q, i) =>
-              `<div class="saved-item">
-                <span class="saved-num">${i + 1}</span>
-                <span class="saved-q">${escapeHtml(q)}</span>
-              </div>`
-            ).join('');
+           list.innerHTML = data.quotes.map((q, i) => {
+
+  const match = q.match(/^\[(.*?)\]\s(.*)$/);
+
+  let timestamp = '';
+  let quoteText = q;
+
+  if (match) {
+    timestamp = match[1];
+    quoteText = match[2];
+  }
+
+  return `
+    <div class="saved-item">
+      <span class="meta-dot" title="Saved on ${timestamp}">⋯</span>
+      <span class="saved-q">${escapeHtml(quoteText)}</span>
+    </div>
+  `;
+}).join('');
           }
         } else {
           list.innerHTML = '<p class="muted error-text">' + data.message + '</p>';

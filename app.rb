@@ -76,7 +76,7 @@ post '/save' do
   begin
     # File.open with 'a' flag = APPEND mode (adds to file without deleting old content)
     File.open(QUOTES_FILE, 'a') do |file|
-      file.puts "[#{Time.now.strftime('%Y-%m-%d %H:%M')}] #{quote}"
+      file.puts "[#{Time.now.strftime('%A, %d %B %Y at %I:%M:%S %p')}] #{quote}"
     end
 
     { status: 'ok', message: 'Quote saved successfully! 🎉' }.to_json
