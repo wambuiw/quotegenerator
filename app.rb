@@ -108,3 +108,7 @@ get '/saved' do
     halt 500, { status: 'error', message: "Could not read file: #{e.message}" }.to_json
   end
 end
+
+
+set :port, ENV.fetch('PORT', 4567)
+set :bind, "0.0.0.0" 
