@@ -151,14 +151,22 @@
         const data = await response.json();
 
        if (data.status === 'ok') {
+
   showFeedback(data.message, 'success');
 
-  // refresh saved quotes panel if open
-  const panel = document.getElementById('savedPanel');
-  if (!panel.classList.contains('hidden')) {
-    toggleSavedQuotes();
-    toggleSavedQuotes();
+  // instantly update saved quotes panel if already open
+  if (savedQuotesCache) {
+
+    const timestamp = new Date().toLocaleString();
+
+    savedQuotesCache.unshift({
+      quote: currentQuote,
+      time: timestamp
+    });
+
+    renderSavedQuotes(savedQuotesCache);
   }
+
 }
 
       } catch (err) {
@@ -191,28 +199,37 @@
         const response = await fetch('/saved');
         const data     = await response.json();
 
-        if (data.status === 'ok') {
-          if (data.quotes.length === 0) {
-           list.innerHTML = data.quotes.map((q, i) => {
+       if (data.status === 'ok') {
 
-  const match = q.match(/^\[(.*?)\]\s(.*)$/);
+  if (data.quotes.length === 0) {
 
-  let timestamp = '';
-  let quoteText = q;
+    list.innerHTML = '<p class="muted">No saved quotes yet.</p>';
 
-  if (match) {
-    timestamp = match[1];
-    quoteText = match[2];
+  } else {
+
+    list.innerHTML = data.quotes.map((q) => {
+
+      const match = q.match(/^\[(.*?)\]\s(.*)$/);
+
+      let timestamp = '';
+      let quoteText = q;
+
+      if (match) {
+        timestamp = match[1];
+        quoteText = match[2];
+      }
+
+      return `
+        <div class="saved-item">
+          <span class="meta-dot" title="Saved on ${timestamp}">⋯</span>
+          <span class="saved-q">${escapeHtml(quoteText)}</span>
+        </div>
+      `;
+    }).join('');
+
   }
 
-  return `
-    <div class="saved-item">
-      <span class="meta-dot" title="Saved on ${timestamp}">⋯</span>
-      <span class="saved-q">${escapeHtml(quoteText)}</span>
-    </div>
-  `;
-}).join('');
-          }
+}
         } else {
           list.innerHTML = '<p class="muted error-text">' + data.message + '</p>';
         }
