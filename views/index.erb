@@ -42,12 +42,12 @@
       <div class="btn-group">
         <!-- Generate button calls our /random route -->
         <button class="btn btn-primary" id="generateBtn" onclick="generateQuote()">
-          <span class="btn-icon"></span> Generate Quote
+          <span class="btn-icon">⚡</span> Generate Quote
         </button>
 
         <!-- Save button calls our /save route; disabled until a quote is shown -->
         <button class="btn btn-secondary" id="saveBtn" onclick="saveQuote()" disabled>
-          <span class="btn-icon"></span> Save Quote
+          <span class="btn-icon">💾</span> Save Quote
         </button>
       </div>
 
@@ -60,7 +60,7 @@
       <!-- Saved Quotes Section -->
       <div class="saved-section">
         <button class="toggle-btn" id="toggleSaved" onclick="toggleSavedQuotes()">
-           View Saved Quotes <span id="toggleArrow">▾</span>
+          📋 View Saved Quotes <span id="toggleArrow">▾</span>
         </button>
 
         <!-- Hidden panel — shown when the user clicks above -->
@@ -84,6 +84,10 @@
     // Track the currently displayed quote so we can save it
     let currentQuote = '';
 
+    // Cache for saved quotes — avoids a network round-trip on every open
+    // Set to null when the cache is stale (e.g. after a new save)
+    let savedQuotesCache = null;
+
     // ── generateQuote ──────────────────────────────────────────────
     // Calls GET /random on our Sinatra server and displays the result
     async function generateQuote() {
@@ -95,7 +99,7 @@
 
       // Show loading state
       btn.disabled = true;
-      btn.innerHTML = '<span class="btn-icon spin">⚡</span> Loading...';
+      btn.innerHTML = '<span class="btn-icon spin">⚡</span> Thinking...';
       clearFeedback();
 
       try {
@@ -150,24 +154,15 @@
 
         const data = await response.json();
 
-       if (data.status === 'ok') {
-
-  showFeedback(data.message, 'success');
-
-  // instantly update saved quotes panel if already open
-  if (savedQuotesCache) {
-
-    const timestamp = new Date().toLocaleString();
-
-    savedQuotesCache.unshift({
-      quote: currentQuote,
-      time: timestamp
-    });
-
-    renderSavedQuotes(savedQuotesCache);
-  }
-
-}
+        if (data.status === 'ok') {
+          showFeedback(data.message, 'success');
+          // Bust the cache and silently pre-fetch in the background
+          // so the panel opens instantly if the user clicks "View Saved Quotes" next
+          savedQuotesCache = null;
+          prefetchSavedQuotes();
+        } else {
+          showFeedback(data.message, 'error');
+        }
 
       } catch (err) {
         showFeedback('Save failed. Server may be down.', 'error');
@@ -177,67 +172,81 @@
       }
     }
 
+    // ── prefetchSavedQuotes ────────────────────────────────────────
+    // Silently fetches /saved in the background and stores result in cache.
+    // Called: (1) on page load, (2) right after a successful save.
+    // This way the panel data is ready BEFORE the user ever clicks the button.
+    async function prefetchSavedQuotes() {
+      try {
+        const response = await fetch('/saved');
+        const data     = await response.json();
+        if (data.status === 'ok') {
+          savedQuotesCache = data.quotes;   // Store in memory
+        }
+      } catch (err) {
+        // Silent fail — prefetch is best-effort; the panel will fall back to live fetch
+      }
+    }
+
     // ── toggleSavedQuotes ──────────────────────────────────────────
-    // Shows/hides the saved quotes panel, fetching from GET /saved
+    // Shows/hides the saved quotes panel.
+    // Uses the in-memory cache if available — no network wait for the user.
     async function toggleSavedQuotes() {
       const panel  = document.getElementById('savedPanel');
       const arrow  = document.getElementById('toggleArrow');
       const list   = document.getElementById('savedList');
 
+      // --- Close panel if already open ---
       if (!panel.classList.contains('hidden')) {
         panel.classList.add('hidden');
         arrow.textContent = '▾';
         return;
       }
 
-      // Show the panel and fetch data
+      // --- Open panel immediately (no waiting for network) ---
       panel.classList.remove('hidden');
       arrow.textContent = '▴';
-      list.innerHTML = '<p class="muted">Loading...</p>';
 
-      try {
-        const response = await fetch('/saved');
-        const data     = await response.json();
-
-       if (data.status === 'ok') {
-
-  if (data.quotes.length === 0) {
-
-    list.innerHTML = '<p class="muted">No saved quotes yet.</p>';
-
-  } else {
-
-    list.innerHTML = data.quotes.map((q) => {
-
-      const match = q.match(/^\[(.*?)\]\s(.*)$/);
-
-      let timestamp = '';
-      let quoteText = q;
-
-      if (match) {
-        timestamp = match[1];
-        quoteText = match[2];
-      }
-
-      return `
-        <div class="saved-item">
-          <span class="meta-dot" title="Saved on ${timestamp}">⋯</span>
-          <span class="saved-q">${escapeHtml(quoteText)}</span>
-        </div>
-      `;
-    }).join('');
-
-  }
-
-}
-        } else {
-          list.innerHTML = '<p class="muted error-text">' + data.message + '</p>';
+      if (savedQuotesCache !== null) {
+        // Cache hit: render instantly from memory
+        renderSavedQuotes(list, savedQuotesCache);
+      } else {
+        // Cache miss (very first open, before any save): show spinner then fetch
+        list.innerHTML = '<p class="muted">Loading...</p>';
+        try {
+          const response = await fetch('/saved');
+          const data     = await response.json();
+          if (data.status === 'ok') {
+            savedQuotesCache = data.quotes;
+            renderSavedQuotes(list, savedQuotesCache);
+          } else {
+            list.innerHTML = '<p class="muted error-text">' + data.message + '</p>';
+          }
+        } catch (err) {
+          list.innerHTML = '<p class="muted error-text">Could not load saved quotes.</p>';
         }
-
-      } catch (err) {
-        list.innerHTML = '<p class="muted error-text">Could not load saved quotes.</p>';
       }
     }
+
+    // ── renderSavedQuotes ──────────────────────────────────────────
+    // Pure rendering helper — takes the list element and an array of quote strings
+    function renderSavedQuotes(listEl, quotes) {
+      if (quotes.length === 0) {
+        listEl.innerHTML = '<p class="muted">No saved quotes yet. Generate one and save it!</p>';
+      } else {
+        listEl.innerHTML = quotes.map((q, i) =>
+          `<div class="saved-item">
+            <span class="saved-num">${i + 1}</span>
+            <span class="saved-q">${escapeHtml(q)}</span>
+          </div>`
+        ).join('');
+      }
+    }
+
+    // ── Page load: kick off prefetch immediately ───────────────────
+    // By the time the user scrolls down and clicks "View Saved Quotes",
+    // the data will already be sitting in savedQuotesCache.
+    prefetchSavedQuotes();
 
     // ── Helpers ────────────────────────────────────────────────────
 
